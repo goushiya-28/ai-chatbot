@@ -9,18 +9,24 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// middleware
-app.use(cors());
+/* middleware */
+
+app.use(cors({
+  origin: "*"
+}));
+
 app.use(express.json());
 
-// Groq client
+/* Groq client */
+
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
 
+/* create new conversation */
 
-// create new conversation
 app.post("/new-chat", async (req, res) => {
+
   try {
 
     const result = await pool.query(
@@ -32,13 +38,17 @@ app.post("/new-chat", async (req, res) => {
     });
 
   } catch (err) {
+
     console.error(err);
     res.status(500).json({ error: "Failed to create conversation" });
+
   }
+
 });
 
 
-// get conversation history
+/* get conversation history */
+
 app.get("/history/:id", async (req, res) => {
 
   try {
@@ -53,14 +63,69 @@ app.get("/history/:id", async (req, res) => {
     res.json(result.rows);
 
   } catch (err) {
+
     console.error(err);
     res.status(500).json({ error: "Failed to fetch history" });
+
   }
 
 });
 
 
-// chat endpoint
+/* get all conversations (for sidebar) */
+
+app.get("/conversations", async (req,res)=>{
+
+  try{
+
+    const result = await pool.query(
+      "SELECT id,title FROM conversations ORDER BY id DESC"
+    );
+
+    res.json(result.rows);
+
+  }catch(err){
+
+    console.error(err);
+    res.status(500).json({error:"Failed to fetch conversations"});
+
+  }
+
+});
+
+
+/* delete chat */
+
+app.delete("/conversation/:id", async (req,res)=>{
+
+  try{
+
+    const {id} = req.params;
+
+    await pool.query(
+      "DELETE FROM messages WHERE conversation_id=$1",
+      [id]
+    );
+
+    await pool.query(
+      "DELETE FROM conversations WHERE id=$1",
+      [id]
+    );
+
+    res.json({success:true});
+
+  }catch(err){
+
+    console.error(err);
+    res.status(500).json({error:"Delete failed"});
+
+  }
+
+});
+
+
+/* chat endpoint */
+
 app.post("/chat", async (req, res) => {
 
   try {
@@ -71,18 +136,21 @@ app.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "Message required" });
     }
 
-    // save user message
+    /* save user message */
+
     await pool.query(
       "INSERT INTO messages(conversation_id,role,content) VALUES($1,$2,$3)",
       [conversation_id, "user", message]
     );
 
 
-    // get conversation history
+    /* get conversation history */
+
     const history = await pool.query(
       "SELECT role,content FROM messages WHERE conversation_id=$1 ORDER BY id",
       [conversation_id]
     );
+
 
     const messages = history.rows.map(m => ({
       role: m.role,
@@ -90,16 +158,19 @@ app.post("/chat", async (req, res) => {
     }));
 
 
-    // call Groq AI
+    /* call Groq AI */
+
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: messages
     });
 
+
     const reply = completion.choices[0].message.content;
 
 
-    // save AI reply
+    /* save AI reply */
+
     await pool.query(
       "INSERT INTO messages(conversation_id,role,content) VALUES($1,$2,$3)",
       [conversation_id, "assistant", reply]
@@ -111,20 +182,27 @@ app.post("/chat", async (req, res) => {
   } catch (err) {
 
     console.error(err);
-    res.status(500).json({ error: "AI response failed" });
+
+    res.json({
+      reply:"AI server error. Please try again."
+    });
 
   }
 
 });
 
 
-// health check
+/* health check */
+
 app.get("/", (req, res) => {
   res.send("AI chatbot backend running");
 });
 
 
-// start server
+/* start server */
+
 app.listen(PORT, () => {
+
   console.log(`Server running on port ${PORT}`);
+
 });
