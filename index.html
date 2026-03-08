@@ -3,7 +3,6 @@
 <head>
 
 <title>AI Chatbot</title>
-
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -15,8 +14,6 @@ display:flex;
 height:100vh;
 background:#eef2ff;
 }
-
-/* sidebar */
 
 .sidebar{
 width:260px;
@@ -48,8 +45,6 @@ justify-content:space-between;
 .conversation:hover{
 background:#e0e7ff;
 }
-
-/* chat area */
 
 .chat{
 flex:1;
@@ -113,15 +108,11 @@ align-items:center;
 justify-content:center;
 }
 
-/* copy button */
-
 .copy{
 font-size:12px;
 cursor:pointer;
 margin-left:8px;
 }
-
-/* input */
 
 .input{
 display:flex;
@@ -169,7 +160,6 @@ color:#666;
 }
 
 </style>
-
 </head>
 
 <body>
@@ -221,20 +211,20 @@ const imgInput=document.getElementById("imgInput")
 
 const voiceBtn=document.getElementById("voiceBtn")
 
-/* load conversations */
-
 async function loadConversations(){
 
+try{
 const res=await fetch(API+"/conversations")
 const data=await res.json()
 
 conversations=data
-
 renderSidebar()
 
+}catch{
+console.log("failed loading chats")
 }
 
-/* sidebar */
+}
 
 function renderSidebar(){
 
@@ -245,6 +235,7 @@ list.innerHTML=""
 conversations.forEach((chat,index)=>{
 
 const div=document.createElement("div")
+
 div.className="conversation"
 
 div.innerHTML=`
@@ -258,9 +249,9 @@ list.appendChild(div)
 
 }
 
-/* create chat */
-
 async function createChat(){
+
+try{
 
 const res=await fetch(API+"/new-chat",{method:"POST"})
 const data=await res.json()
@@ -271,9 +262,11 @@ loadConversations()
 
 messagesBox.innerHTML=""
 
+}catch{
+alert("cannot create chat")
 }
 
-/* delete chat */
+}
 
 async function deleteChat(id){
 
@@ -284,8 +277,6 @@ loadConversations()
 messagesBox.innerHTML=""
 
 }
-
-/* history */
 
 async function loadHistory(id){
 
@@ -302,8 +293,6 @@ addMessage(m.content,m.role==="user"?"user":"bot")
 })
 
 }
-
-/* typing */
 
 function showTyping(){
 
@@ -328,8 +317,6 @@ if(typing) typing.remove()
 
 }
 
-/* send message */
-
 async function sendMessage(){
 
 const text=msgInput.value.trim()
@@ -344,6 +331,8 @@ msgInput.value=""
 
 showTyping()
 
+try{
+
 const res=await fetch(API+"/chat",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
@@ -357,11 +346,17 @@ const data=await res.json()
 
 removeTyping()
 
-addMessage(data.reply,"bot")
+addMessage(data.reply || "AI did not respond.","bot")
+
+}catch{
+
+removeTyping()
+
+addMessage("Server error. Backend may be sleeping.","bot")
 
 }
 
-/* add message */
+}
 
 function addMessage(text,type){
 
@@ -376,16 +371,20 @@ const bubble=document.createElement("div")
 bubble.className="bubble"
 
 bubble.innerHTML=`
-${text}
+<span class="msgText">${text}</span>
 <span class="copy" onclick="copyText(this)">📋</span>
 `
 
 if(type==="user"){
+
 msg.appendChild(bubble)
 msg.appendChild(avatar)
+
 }else{
+
 msg.appendChild(avatar)
 msg.appendChild(bubble)
+
 }
 
 messagesBox.appendChild(msg)
@@ -394,19 +393,13 @@ messagesBox.scrollTop=messagesBox.scrollHeight
 
 }
 
-/* copy */
-
 function copyText(btn){
 
-const text=btn.parentElement.innerText
+const text=btn.parentElement.querySelector(".msgText").innerText
 
 navigator.clipboard.writeText(text)
 
-alert("Copied!")
-
 }
-
-/* image upload */
 
 imgBtn.onclick=()=>imgInput.click()
 
@@ -431,51 +424,9 @@ msg.innerHTML=`
 
 messagesBox.appendChild(msg)
 
-}
-
-/* voice */
-
-let recorder
-let chunks=[]
-
-voiceBtn.onclick=async()=>{
-
-const stream=await navigator.mediaDevices.getUserMedia({audio:true})
-
-recorder=new MediaRecorder(stream)
-
-recorder.start()
-
-chunks=[]
-
-recorder.ondataavailable=e=>chunks.push(e.data)
-
-recorder.onstop=()=>{
-
-const blob=new Blob(chunks)
-
-const url=URL.createObjectURL(blob)
-
-const msg=document.createElement("div")
-
-msg.className="message user"
-
-msg.innerHTML=`
-<div class="bubble">
-<audio controls src="${url}"></audio>
-</div>
-<div class="avatar">🧑</div>
-`
-
-messagesBox.appendChild(msg)
+messagesBox.scrollTop=messagesBox.scrollHeight
 
 }
-
-setTimeout(()=>recorder.stop(),3000)
-
-}
-
-/* events */
 
 sendBtn.onclick=sendMessage
 
