@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>AI Chatbot</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+
+body{
+margin:0;
+font-family:Arial;
+display:flex;
+height:100vh;
+background:#eef2ff;
+}
+
+/* sidebar */
+
+.sidebar{
+width:260px;
+background:white;
+border-right:1px solid #ddd;
+padding:15px;
+overflow-y:auto;
+}
+
+.newchat{
+width:100%;
+padding:10px;
+background:#3b82f6;
+border:none;
+border-radius:6px;
+color:white;
+cursor:pointer;
+margin-bottom:15px;
+}
+
+.conversation{
+padding:10px;
+border-radius:6px;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+}
+
+.conversation:hover{
+background:#e0e7ff;
+}
+
+/* chat area */
+
+.chat{
+flex:1;
+display:flex;
+flex-direction:column;
+}
+
+.header{
+padding:15px;
+background:white;
+border-bottom:1px solid #ddd;
+text-align:center;
+font-weight:bold;
+}
+
+.messages{
+flex:1;
+overflow-y:auto;
+padding:20px;
+display:flex;
+flex-direction:column;
+gap:12px;
+}
+
+.message{
+display:flex;
+gap:8px;
+}
+
+.user{
+justify-content:flex-end;
+}
+
+.bot{
+justify-content:flex-start;
+}
+
+.bubble{
+padding:10px 14px;
+border-radius:12px;
+max-width:65%;
+position:relative;
+}
+
+.user .bubble{
+background:#3b82f6;
+color:white;
+}
+
+.bot .bubble{
+background:#dbeafe;
+}
+
+.avatar{
+width:30px;
+height:30px;
+background:#c7d2fe;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+/* copy button */
+
+.copy{
+font-size:12px;
+cursor:pointer;
+margin-left:8px;
+}
+
+/* input */
+
+.input{
+display:flex;
+gap:8px;
+padding:12px;
+border-top:1px solid #ddd;
+background:white;
+}
+
+textarea{
+flex:1;
+border:1px solid #ccc;
+border-radius:6px;
+padding:8px;
+resize:none;
+}
+
+button{
+cursor:pointer;
+}
+
+.icon{
+background:#e0e7ff;
+border:none;
+border-radius:6px;
+padding:6px 10px;
+}
+
+.send{
+background:#3b82f6;
+color:white;
+border:none;
+border-radius:6px;
+padding:8px 14px;
+}
+
+.bubble img{
+max-width:200px;
+border-radius:8px;
+}
+
+.typing{
+font-style:italic;
+color:#666;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="sidebar">
+
+<button class="newchat" id="newChatBtn">+ New Chat</button>
+
+<div id="conversations"></div>
+
+</div>
+
+<div class="chat">
+
+<div class="header">AI Chatbot</div>
+
+<div id="messages" class="messages"></div>
+
+<div class="input">
+
+<input type="file" id="imgInput" hidden accept="image/*">
+
+<button class="icon" id="imgBtn">🖼️</button>
+
+<button class="icon" id="voiceBtn">🎤</button>
+
+<textarea id="msg" rows="1" placeholder="Send message..."></textarea>
+
+<button class="send" id="sendBtn">Send</button>
+
+</div>
+
+</div>
+
+<script>
+
+const API="http://localhost:3001"
+
+let currentConversation=null
+let conversations=[]
+
+const msgInput=document.getElementById("msg")
+const sendBtn=document.getElementById("sendBtn")
+const newChatBtn=document.getElementById("newChatBtn")
+const messagesBox=document.getElementById("messages")
+
+const imgBtn=document.getElementById("imgBtn")
+const imgInput=document.getElementById("imgInput")
+
+const voiceBtn=document.getElementById("voiceBtn")
+
+/* load conversations */
+
+async function loadConversations(){
+
+const res=await fetch(API+"/conversations")
+const data=await res.json()
+
+conversations=data
+
+renderSidebar()
+
+}
+
+/* sidebar */
+
+function renderSidebar(){
+
+const list=document.getElementById("conversations")
+
+list.innerHTML=""
+
+conversations.forEach((chat,index)=>{
+
+const div=document.createElement("div")
+div.className="conversation"
+
+div.innerHTML=`
+<span onclick="loadHistory(${chat.id})">${chat.title || "Chat "+(index+1)}</span>
+<span onclick="deleteChat(${chat.id})">🗑</span>
+`
+
+list.appendChild(div)
+
+})
+
+}
+
+/* create chat */
+
+async function createChat(){
+
+const res=await fetch(API+"/new-chat",{method:"POST"})
+const data=await res.json()
+
+currentConversation=data.conversation_id
+
+loadConversations()
+
+messagesBox.innerHTML=""
+
+}
+
+/* delete chat */
+
+async function deleteChat(id){
+
+await fetch(API+"/conversation/"+id,{method:"DELETE"})
+
+loadConversations()
+
+messagesBox.innerHTML=""
+
+}
+
+/* history */
+
+async function loadHistory(id){
+
+currentConversation=id
+
+const res=await fetch(API+"/history/"+id)
+
+const data=await res.json()
+
+messagesBox.innerHTML=""
+
+data.forEach(m=>{
+addMessage(m.content,m.role==="user"?"user":"bot")
+})
+
+}
+
+/* typing */
+
+function showTyping(){
+
+const msg=document.createElement("div")
+msg.className="message bot"
+msg.id="typing"
+
+msg.innerHTML=`
+<div class="avatar">🤖</div>
+<div class="bubble typing">Typing...</div>
+`
+
+messagesBox.appendChild(msg)
+
+}
+
+function removeTyping(){
+
+const typing=document.getElementById("typing")
+
+if(typing) typing.remove()
+
+}
+
+/* send message */
+
+async function sendMessage(){
+
+const text=msgInput.value.trim()
+
+if(!text) return
+
+if(!currentConversation) await createChat()
+
+addMessage(text,"user")
+
+msgInput.value=""
+
+showTyping()
+
+const res=await fetch(API+"/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+message:text,
+conversation_id:currentConversation
+})
+})
+
+const data=await res.json()
+
+removeTyping()
+
+addMessage(data.reply,"bot")
+
+}
+
+/* add message */
+
+function addMessage(text,type){
+
+const msg=document.createElement("div")
+msg.className="message "+type
+
+const avatar=document.createElement("div")
+avatar.className="avatar"
+avatar.innerText=type==="user"?"🧑":"🤖"
+
+const bubble=document.createElement("div")
+bubble.className="bubble"
+
+bubble.innerHTML=`
+${text}
+<span class="copy" onclick="copyText(this)">📋</span>
+`
+
+if(type==="user"){
+msg.appendChild(bubble)
+msg.appendChild(avatar)
+}else{
+msg.appendChild(avatar)
+msg.appendChild(bubble)
+}
+
+messagesBox.appendChild(msg)
+
+messagesBox.scrollTop=messagesBox.scrollHeight
+
+}
+
+/* copy */
+
+function copyText(btn){
+
+const text=btn.parentElement.innerText
+
+navigator.clipboard.writeText(text)
+
+alert("Copied!")
+
+}
+
+/* image upload */
+
+imgBtn.onclick=()=>imgInput.click()
+
+imgInput.onchange=(e)=>{
+
+const file=e.target.files[0]
+
+if(!file) return
+
+const url=URL.createObjectURL(file)
+
+const msg=document.createElement("div")
+
+msg.className="message user"
+
+msg.innerHTML=`
+<div class="bubble">
+<img src="${url}">
+</div>
+<div class="avatar">🧑</div>
+`
+
+messagesBox.appendChild(msg)
+
+}
+
+/* voice */
+
+let recorder
+let chunks=[]
+
+voiceBtn.onclick=async()=>{
+
+const stream=await navigator.mediaDevices.getUserMedia({audio:true})
+
+recorder=new MediaRecorder(stream)
+
+recorder.start()
+
+chunks=[]
+
+recorder.ondataavailable=e=>chunks.push(e.data)
+
+recorder.onstop=()=>{
+
+const blob=new Blob(chunks)
+
+const url=URL.createObjectURL(blob)
+
+const msg=document.createElement("div")
+
+msg.className="message user"
+
+msg.innerHTML=`
+<div class="bubble">
+<audio controls src="${url}"></audio>
+</div>
+<div class="avatar">🧑</div>
+`
+
+messagesBox.appendChild(msg)
+
+}
+
+setTimeout(()=>recorder.stop(),3000)
+
+}
+
+/* events */
+
+sendBtn.onclick=sendMessage
+
+msgInput.addEventListener("keydown",e=>{
+if(e.key==="Enter" && !e.shiftKey){
+e.preventDefault()
+sendMessage()
+}
+})
+
+newChatBtn.onclick=createChat
+
+loadConversations()
+
+</script>
+
+</body>
+</html>
